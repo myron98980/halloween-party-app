@@ -7,9 +7,10 @@ import * as serviceAccountCredentials from "../service-account.json";
 admin.initializeApp();
 
 const SPREADSHEET_ID = "1X3gLoo5JfGAhvHhEVsHdm57FI4kdTBmiQ57DQ-H0p7s";
+const PRECIO_VIP = 40;
+const PRECIO_GENERAL = 25;
 
 // --- FUNCIÓN 1: SE EJECUTA CUANDO SE CREA UN NUEVO TICKET ---
-// Esta función ahora solo se encarga de escribir los detalles del ticket en la hoja correspondiente.
 export const registrarTicketEnSheet = onDocumentCreated(
     {
       document: "tickets/{ticketId}",
@@ -33,37 +34,35 @@ export const registrarTicketEnSheet = onDocumentCreated(
         const sheets = google.sheets({version: "v4", auth});
         
         const ticketData = snap.data();
-        const vendedor = ticketData.vendedorNombre;
-        const numeroTicketCompleto = ticketData.numeroTicket;
-        const tipoTicket = ticketData.tipo;
-        const comprador = ticketData.nombreComprador;
-        const estado = ticketData.estado;
+        const {vendedorNombre, numeroTicket, tipo, nombreComprador, estado} = ticketData;
 
-        functions.logger.info(`Nuevo ticket registrado: ${numeroTicketCompleto}`);
+        // Calcula el monto basado en el estado y tipo del ticket
+        const monto = estado === "PAGADO" ? (tipo === "VIP" ? PRECIO_VIP : PRECIO_GENERAL) : 0;
 
-        // La lógica para añadir/contar vendedores ha sido eliminada. La fórmula de Sheets se encarga.
+        functions.logger.info(`Nuevo ticket registrado: ${numeroTicket}`);
 
         // Tarea Única: Actualizar la hoja del tipo de Ticket (VIP o General)
-        const targetSheet = tipoTicket === "VIP" ? "Tickets VIP" : "Tickets General";
+        const targetSheet = tipo === "VIP" ? "Tickets VIP" : "Tickets General";
         const ticketsColumn = await sheets.spreadsheets.values.get({spreadsheetId: SPREADSHEET_ID, range: `${targetSheet}!A:A`});
         const ticketList = ticketsColumn.data.values || [];
-        const ticketRowIndex = ticketList.findIndex((row) => row && row[0] === numeroTicketCompleto);
+        const ticketRowIndex = ticketList.findIndex((row) => row && row[0] === numeroTicket);
 
         if (ticketRowIndex !== -1) {
           const targetRow = ticketRowIndex + 1;
           await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${targetSheet}!B${targetRow}:E${targetRow}`,
+            range: `${targetSheet}!B${targetRow}:F${targetRow}`, // Rango extendido hasta la columna F
             valueInputOption: "USER_ENTERED",
             requestBody: {values: [[
-              vendedor, 
+              vendedorNombre, 
               new Date().toLocaleString("es-PE", {timeZone: "America/Lima"}),
-              comprador,
+              nombreComprador,
               estado,
+              monto, // Escribe el monto en la columna F
             ]]},
           });
         } else {
-          functions.logger.warn(`Ticket ${numeroTicketCompleto} no fue encontrado en la hoja '${targetSheet}'.`);
+          functions.logger.warn(`Ticket ${numeroTicket} no fue encontrado en la hoja '${targetSheet}'.`);
         }
       } catch (error) {
         functions.logger.error("Error al escribir en Google Sheet durante la creación:", error);
@@ -95,6 +94,10 @@ export const actualizarTicketEnSheet = onDocumentUpdated(
         });
         const sheets = google.sheets({version: "v4", auth});
 
+        // Calcula el monto basado en los datos DESPUÉS del cambio
+        const monto = dataDespues.estado === "PAGADO" ? (dataDespues.tipo === "VIP" ? PRECIO_VIP : PRECIO_GENERAL) : 0;
+
+        // Caso 1: El tipo de ticket cambió (ej: de VIP a GEN)
         if (dataAntes.numeroTicket !== dataDespues.numeroTicket) {
           functions.logger.info(`El ticket cambió de ${dataAntes.numeroTicket} a ${dataDespues.numeroTicket}. Actualizando Google Sheet.`);
           
@@ -107,9 +110,9 @@ export const actualizarTicketEnSheet = onDocumentUpdated(
             const filaAntigua = filaAntiguaIndex + 1;
             await sheets.spreadsheets.values.update({
               spreadsheetId: SPREADSHEET_ID,
-              range: `${hojaAntigua}!B${filaAntigua}:E${filaAntigua}`,
+              range: `${hojaAntigua}!B${filaAntigua}:F${filaAntigua}`, // Rango extendido hasta la columna F
               valueInputOption: "RAW",
-              requestBody: {values: [["", "", "", ""]]},
+              requestBody: {values: [["", "", "", "", ""]]}, // 5 valores vacíos
             });
           }
 
@@ -122,17 +125,20 @@ export const actualizarTicketEnSheet = onDocumentUpdated(
             const filaNueva = filaNuevaIndex + 1;
             await sheets.spreadsheets.values.update({
               spreadsheetId: SPREADSHEET_ID,
-              range: `${hojaNueva}!B${filaNueva}:E${filaNueva}`,
+              range: `${hojaNueva}!B${filaNueva}:F${filaNueva}`, // Rango extendido hasta la columna F
               valueInputOption: "USER_ENTERED",
               requestBody: {values: [[
                 dataDespues.vendedorNombre, 
                 new Date().toLocaleString("es-PE", {timeZone: "America/Lima"}),
                 dataDespues.nombreComprador,
                 dataDespues.estado,
+                monto,
               ]]},
             });
           }
-        } else {
+        } 
+        // Caso 2: El tipo de ticket NO cambió, pero otros datos sí
+        else {
           functions.logger.info(`Actualizando datos para el ticket ${dataDespues.numeroTicket}.`);
           const hojaActual = dataDespues.tipo === "VIP" ? "Tickets VIP" : "Tickets General";
           const ticketsColumna = await sheets.spreadsheets.values.get({spreadsheetId: SPREADSHEET_ID, range: `${hojaActual}!A:A`});
@@ -143,13 +149,14 @@ export const actualizarTicketEnSheet = onDocumentUpdated(
             const filaActual = ticketRowIndex + 1;
             await sheets.spreadsheets.values.update({
               spreadsheetId: SPREADSHEET_ID,
-              range: `${hojaActual}!B${filaActual}:E${filaActual}`,
+              range: `${hojaActual}!B${filaActual}:F${filaActual}`, // Rango extendido hasta la columna F
               valueInputOption: "USER_ENTERED",
               requestBody: {values: [[
                 dataDespues.vendedorNombre, 
                 dataAntes.fechaRegistro.toDate().toLocaleString("es-PE", {timeZone: "America/Lima"}),
                 dataDespues.nombreComprador,
                 dataDespues.estado,
+                monto,
               ]]},
             });
           }
@@ -195,8 +202,6 @@ export const borrarTicketEnSheet = onDocumentDeleted(
         });
         const sheets = google.sheets({version: "v4", auth});
 
-        // La lógica para disminuir el contador de vendedor ha sido eliminada.
-
         // Tarea Única: Limpiar la fila en la hoja del tipo de Ticket
         const targetSheet = tipoTicket === "VIP" ? "Tickets VIP" : "Tickets General";
         const ticketsColumn = await sheets.spreadsheets.values.get({spreadsheetId: SPREADSHEET_ID, range: `${targetSheet}!A:A`});
@@ -207,9 +212,9 @@ export const borrarTicketEnSheet = onDocumentDeleted(
           const targetRow = ticketRowIndex + 1;
           await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${targetSheet}!B${targetRow}:E${targetRow}`,
+            range: `${targetSheet}!B${targetRow}:F${targetRow}`, // Rango extendido hasta la columna F
             valueInputOption: "RAW",
-            requestBody: {values: [["", "", "", ""]]},
+            requestBody: {values: [["", "", "", "", ""]]}, // 5 valores vacíos
           });
         }
         
