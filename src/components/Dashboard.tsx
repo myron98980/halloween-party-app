@@ -6,8 +6,9 @@ import EditTicketModal from './EditTicketModal';
 
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
 import { Bar, Pie } from 'react-chartjs-2';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement, ChartDataLabels);
 
 type ActiveTabView = 'dashboard' | 'filtro';
 
@@ -26,7 +27,7 @@ const PRECIO_VIP = 40;
 const PRECIO_GENERAL = 25;
 
 const Dashboard: React.FC<{ user: { nombre: string } }> = ({ user }) => {
-  const [allTickets, setAllTickets] = useState<Ticket[]>([]);
+    const [allTickets, setAllTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTabView>('dashboard');
@@ -58,9 +59,7 @@ const Dashboard: React.FC<{ user: { nombre: string } }> = ({ user }) => {
 
   const filteredTickets = useMemo(() => {
     const sorted = [...allTickets].sort((a, b) => (b.fechaRegistro?.toDate() || 0) - (a.fechaRegistro?.toDate() || 0));
-    if (!searchTerm.trim()) {
-        return sorted;
-    }
+    if (!searchTerm.trim()) return sorted;
     return sorted.filter(ticket => 
       ticket.nombreComprador.toLowerCase().includes(searchTerm.toLowerCase()) ||
       ticket.numeroTicket.toLowerCase().includes(searchTerm.toLowerCase())
@@ -75,8 +74,8 @@ const Dashboard: React.FC<{ user: { nombre: string } }> = ({ user }) => {
     datasets: [{
       label: 'Ventas por Tipo',
       data: [summary.ticketsVip, summary.ticketsGeneral],
-      backgroundColor: ['rgba(251, 146, 60, 0.8)', 'rgba(167, 139, 250, 0.8)'],
-      borderColor: ['rgba(251, 146, 60, 1)', 'rgba(167, 139, 250, 1)'],
+      backgroundColor: ['rgba(251, 113, 133, 0.8)', 'rgba(192, 132, 252, 0.8)'], // Colores ajustados
+      borderColor: ['rgba(251, 113, 133, 1)', 'rgba(192, 132, 252, 1)'],
       borderWidth: 1,
     }],
   };
@@ -85,14 +84,50 @@ const Dashboard: React.FC<{ user: { nombre: string } }> = ({ user }) => {
     datasets: [{
       label: '# de Tickets',
       data: [summary.pagados, summary.porPagar, summary.gratis],
-      backgroundColor: ['rgba(34, 197, 94, 0.8)', 'rgba(251, 191, 36, 0.8)', 'rgba(107, 114, 128, 0.8)'],
-      borderColor: ['rgba(74, 222, 128, 1)', 'rgba(252, 211, 77, 1)', 'rgba(156, 163, 175, 1)'],
+      backgroundColor: ['rgba(52, 211, 153, 0.8)', 'rgba(251, 191, 36, 0.8)', 'rgba(107, 114, 128, 0.8)'],
+      borderColor: ['rgba(110, 231, 183, 1)', 'rgba(252, 211, 77, 1)', 'rgba(156, 163, 175, 1)'],
       borderWidth: 1,
     }],
   };
-  const commonChartOptions = {
-    plugins: { legend: { display: false } },
+  
+  const barChartOptions = {
+    responsive: true,
     maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      datalabels: {
+        color: 'white',
+        anchor: 'end' as const,
+        align: 'end' as const,
+        offset: -4,
+        font: { weight: 'bold' as const },
+        formatter: (value: number) => value > 0 ? value : '',
+      },
+    },
+    scales: {
+      y: { ticks: { color: 'white' }, grid: { color: 'rgba(255, 255, 255, 0.1)' }, min: 0 },
+      x: { ticks: { color: 'white' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
+    },
+  };
+
+  const pieChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: 'top' as const,
+        labels: { color: 'white' },
+      },
+      datalabels: {
+        color: 'white',
+        font: {
+          weight: 'bold' as const,
+          size: 14,
+        },
+        formatter: (value: number) => value > 0 ? value : '', 
+      },
+    },
   };
 
   if (loading) { return <div className="min-h-screen flex items-center justify-center text-white font-cinzel text-2xl">Cargando Datos...</div>; }
@@ -131,13 +166,14 @@ const Dashboard: React.FC<{ user: { nombre: string } }> = ({ user }) => {
                     </button>
                   </div>
                   <div className="space-y-8">
-                    <div className="border-4 border-orange-500 rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.3)' }}><h3 className="text-lg font-bold mb-4 text-center text-orange-200">Ventas VIP vs. General</h3><div className="h-64"><Bar options={{...commonChartOptions, scales: { y: { ticks: { color: 'white' } }, x: { ticks: { color: 'white' } } }}} data={barChartData} /></div></div>
-                    <div className="border-4 border-orange-500 rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.3)' }}><h3 className="text-lg font-bold mb-4 text-center text-orange-200">Distribución de Pagos</h3><div className="h-64 w-64 mx-auto"><Pie data={pieChartData} options={{...commonChartOptions, plugins: { legend: { display: true, labels: { color: 'white' } } }}} /></div></div>
+                    <div className="border-4 border-orange-500 rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.3)' }}><h3 className="text-lg font-bold mb-4 text-center text-orange-200">Ventas VIP vs. General</h3><div className="h-64"><Bar options={barChartOptions} data={barChartData} /></div></div>
+                    <div className="border-4 border-orange-500 rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.3)' }}><h3 className="text-lg font-bold mb-4 text-center text-orange-200">Distribución de Pagos</h3><div className="h-64 w-64 mx-auto"><Pie data={pieChartData} options={pieChartOptions} /></div></div>
                   </div>
               </div>
             )}
             {activeTab === 'filtro' && (
               <div className="max-w-md mx-auto">
+              
                 <input type="text" placeholder="Buscar por Comprador o N° de Ticket..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-800 border-2 border-gray-600 rounded-lg p-2 mb-4 focus:outline-none focus:ring-2 focus:ring-orange-500"/>
                 <div className="space-y-3 max-h-[60vh] overflow-y-auto mt-4">
                   {filteredTickets.map(ticket => (
