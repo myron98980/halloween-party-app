@@ -1,7 +1,6 @@
-// src/components/ConfirmationModal.tsx
-
 import React from 'react';
 
+// Definimos las props que recibirá el modal
 interface ConfirmationModalProps {
   title: string;
   message: string;
@@ -9,6 +8,8 @@ interface ConfirmationModalProps {
   onCancel: () => void;
   confirmText?: string;
   cancelText?: string;
+  // Prop opcional para cambiar el estilo del botón de confirmación (ej: para borrados)
+  confirmButtonClass?: string;
 }
 
 const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
@@ -17,13 +18,15 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   onConfirm,
   onCancel,
   confirmText = 'Confirmar',
-  cancelText = 'Cancelar'
+  cancelText = 'Cancelar',
+  // Le damos un valor por defecto para que sea el naranja si no se especifica otro
+  confirmButtonClass = 'bg-orange-600 hover:bg-orange-700',
 }) => {
   return (
     // Fondo oscuro semi-transparente que cubre toda la pantalla
     <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50">
       {/* Contenedor principal del modal */}
-      <div className="w-full max-w-sm bg-gray-900 border-4 border-orange-500 rounded-2xl p-6 text-white text-center shadow-lg">
+      <div className="w-full max-w-sm bg-gray-900 border-4 border-orange-500 rounded-2xl p-6 text-white text-center shadow-lg animate-fade-in-up"> {/* Añadida una pequeña animación */}
         <h1 className="font-cinzel text-2xl text-orange-300 mb-4">{title}</h1>
         <p className="text-gray-300 mb-8">{message}</p>
         
@@ -37,7 +40,8 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           </button>
           <button 
             onClick={onConfirm} 
-            className="w-full py-3 bg-orange-600 hover:bg-orange-700 rounded-lg font-bold transition-colors"
+            // Usamos la nueva prop para aplicar el estilo dinámicamente
+            className={`w-full py-3 rounded-lg font-bold transition-colors ${confirmButtonClass}`}
           >
             {confirmText}
           </button>

@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase'; 
 import RegisterTicketModal from './RegisterTicketModal';
 import EditTicketModal from './EditTicketModal';
+import ConfirmationModal from './ConfirmationModal';
 
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
 import { Bar, Pie } from 'react-chartjs-2';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
+import { toast } from 'sonner';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement, ChartDataLabels);
 
@@ -27,12 +29,13 @@ const PRECIO_VIP = 40;
 const PRECIO_GENERAL = 25;
 
 const Dashboard: React.FC<{ user: { nombre: string } }> = ({ user }) => {
-    const [allTickets, setAllTickets] = useState<Ticket[]>([]);
+  const [allTickets, setAllTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTabView>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [ticketToEdit, setTicketToEdit] = useState<Ticket | null>(null);
+  const [ticketToDelete, setTicketToDelete] = useState<Ticket | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'tickets'));
@@ -68,13 +71,31 @@ const Dashboard: React.FC<{ user: { nombre: string } }> = ({ user }) => {
 
   const handleEditClick = (ticket: Ticket) => setTicketToEdit(ticket);
   const handleCloseEditModal = () => setTicketToEdit(null);
+  const handleDeleteClick = (ticket: Ticket) => setTicketToDelete(ticket);
+  const handleCloseDeleteModal = () => setTicketToDelete(null);
+
+  const executeDelete = async () => {
+    if (!ticketToDelete) return;
+    handleCloseDeleteModal();
+    const loadingToastId = toast.loading('Eliminando ticket...');
+    try {
+      const ticketRef = doc(db, 'tickets', ticketToDelete.id);
+      await deleteDoc(ticketRef);
+      toast.dismiss(loadingToastId);
+      toast.success(`Ticket ${ticketToDelete.numeroTicket} eliminado con éxito.`);
+    } catch (error) {
+      toast.dismiss(loadingToastId);
+      console.error("Error al eliminar el ticket: ", error);
+      toast.error('Hubo un problema al eliminar el ticket.');
+    }
+  };
 
   const barChartData = {
     labels: ['VIP', 'General'],
     datasets: [{
       label: 'Ventas por Tipo',
       data: [summary.ticketsVip, summary.ticketsGeneral],
-      backgroundColor: ['rgba(251, 113, 133, 0.8)', 'rgba(192, 132, 252, 0.8)'], // Colores ajustados
+      backgroundColor: ['rgba(251, 113, 133, 0.8)', 'rgba(192, 132, 252, 0.8)'],
       borderColor: ['rgba(251, 113, 133, 1)', 'rgba(192, 132, 252, 1)'],
       borderWidth: 1,
     }],
@@ -89,7 +110,6 @@ const Dashboard: React.FC<{ user: { nombre: string } }> = ({ user }) => {
       borderWidth: 1,
     }],
   };
-  
   const barChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -109,22 +129,14 @@ const Dashboard: React.FC<{ user: { nombre: string } }> = ({ user }) => {
       x: { ticks: { color: 'white' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
     },
   };
-
   const pieChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: {
-        display: true,
-        position: 'top' as const,
-        labels: { color: 'white' },
-      },
+      legend: { display: true, position: 'top' as const, labels: { color: 'white' } },
       datalabels: {
         color: 'white',
-        font: {
-          weight: 'bold' as const,
-          size: 14,
-        },
+        font: { weight: 'bold' as const, size: 14, },
         formatter: (value: number) => value > 0 ? value : '', 
       },
     },
@@ -140,7 +152,6 @@ const Dashboard: React.FC<{ user: { nombre: string } }> = ({ user }) => {
             <button onClick={() => setActiveTab('filtro')} className={`font-cinzel text-xl py-2 px-6 transition-colors duration-300 ${activeTab === 'filtro' ? 'text-orange-300 border-b-4 border-orange-400' : 'text-gray-500'}`}>Filtro</button>
         </div>
         <h2 className="text-center text-xl mb-8">Bienvenido, <span className="font-bold text-orange-300">{user.nombre}</span></h2>
-        
         <div>
             {activeTab === 'dashboard' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
@@ -173,13 +184,18 @@ const Dashboard: React.FC<{ user: { nombre: string } }> = ({ user }) => {
             )}
             {activeTab === 'filtro' && (
               <div className="max-w-md mx-auto">
-              
                 <input type="text" placeholder="Buscar por Comprador o N° de Ticket..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-800 border-2 border-gray-600 rounded-lg p-2 mb-4 focus:outline-none focus:ring-2 focus:ring-orange-500"/>
                 <div className="space-y-3 max-h-[60vh] overflow-y-auto mt-4">
                   {filteredTickets.map(ticket => (
                     <div key={ticket.id} className="bg-gray-800 p-4 rounded-lg flex justify-between items-center">
                       <div><p className="font-bold text-lg">{ticket.numeroTicket}</p><p className="text-gray-300">{ticket.nombreComprador}</p><p className="text-xs text-gray-500">Vendido por: {ticket.vendedorNombre}</p></div>
-                      <div className='text-right'><p className={`font-semibold ${ticket.estado === 'PAGADO' ? 'text-green-400' : ticket.estado === 'POR_PAGAR' ? 'text-yellow-400' : 'text-gray-400'}`}>{ticket.estado}</p><button onClick={() => handleEditClick(ticket)} className="text-sm text-orange-400 hover:text-orange-300 mt-1">Editar</button></div>
+                      <div className='text-right'>
+                        <p className={`font-semibold ${ticket.estado === 'PAGADO' ? 'text-green-400' : ticket.estado === 'POR_PAGAR' ? 'text-yellow-400' : 'text-gray-400'}`}>{ticket.estado}</p>
+                        <div className="flex gap-3 mt-1 justify-end">
+                            <button onClick={() => handleEditClick(ticket)} className="text-sm text-orange-400 hover:text-orange-300">Editar</button>
+                            <button onClick={() => handleDeleteClick(ticket)} className="text-sm text-red-500 hover:text-red-400">Eliminar</button>
+                         </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -190,6 +206,16 @@ const Dashboard: React.FC<{ user: { nombre: string } }> = ({ user }) => {
       
       {isRegisterModalOpen && <RegisterTicketModal user={user} onClose={() => setIsRegisterModalOpen(false)} />}
       {ticketToEdit && <EditTicketModal user={user} ticket={ticketToEdit} onClose={handleCloseEditModal} />}
+      {ticketToDelete && (
+        <ConfirmationModal 
+          title="Confirmar Eliminación"
+          message={`¿Estás seguro de que deseas eliminar el ticket ${ticketToDelete.numeroTicket} a nombre de ${ticketToDelete.nombreComprador}? Esta acción no se puede deshacer.`}
+          onConfirm={executeDelete}
+          onCancel={handleCloseDeleteModal}
+          confirmText="Sí, Eliminar"
+          confirmButtonClass="bg-red-600 hover:bg-red-700"
+        />
+      )}
     </>
   );
 };
